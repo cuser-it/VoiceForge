@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoxCPM2 录音训练工作台</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <canvas id="shaderCanvas" aria-hidden="true"></canvas>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true">≋</div>
+          <div class="brand__name">VoxCPM2</div>
+        </div>
+
+        <div class="segmented topbar__counts" id="countOptions" aria-label="录制条数">
+          <button type="button" class="segment is-active" data-count="20">
+            <span>20</span>
+            <small>条</small>
+          </button>
+          <button type="button" class="segment" data-count="30">
+            <span>30</span>
+            <small>条</small>
+          </button>
+          <button type="button" class="segment" data-count="50">
+            <span>50</span>
+            <small>条</small>
+          </button>
+        </div>
+
+        <div class="topbar__actions">
+          <button type="button" class="ghost-pill" id="directoryButton">
+            <span class="icon" aria-hidden="true">□</span>
+            <span id="storageMode">选择 output</span>
+          </button>
+          <button type="button" class="primary-pill" id="exportButton">导出 ZIP</button>
+        </div>
+      </header>
+
+      <button
+        type="button"
+        class="source-panel-toggle"
+        id="sourcePanelToggle"
+        aria-label="展开文案管理"
+        hidden
+      >
+        文
+      </button>
+
+      <button
+        type="button"
+        class="task-panel-toggle"
+        id="taskPanelToggle"
+        aria-label="展开任务列表"
+        hidden
+      >
+        列
+      </button>
+
+      <aside class="side-panel source-panel" id="sourcePanel" aria-label="文案与输出配置">
+        <div class="panel-heading">
+          <div>
+            <h2>文案管理</h2>
+            <p id="poolSummary">正在载入内置文案库</p>
+          </div>
+          <button type="button" class="panel-close" id="sourcePanelClose" aria-label="收起文案管理">
+            ×
+          </button>
+        </div>
+
+        <section class="stack source-stack">
+          <div class="section-title">语料来源</div>
+          <div class="source-options" id="sourceOptions">
+            <button type="button" class="source-card is-active" data-source="builtin">
+              <span class="radio-dot" aria-hidden="true"></span>
+              <span>内置 300 条标准语料</span>
+            </button>
+            <button type="button" class="source-card" data-source="combined">
+              <span class="radio-dot" aria-hidden="true"></span>
+              <span>内置 + 自定义文案</span>
+            </button>
+          </div>
+
+          <label class="upload-card" for="customFile">
+            <span class="upload-card__icon" aria-hidden="true">⇧</span>
+            <span>上传 .txt / .csv 文件</span>
+            <input id="customFile" type="file" accept=".txt,.csv,text/plain,text/csv" />
+          </label>
+          <p class="microcopy" id="customSummary">尚未上传自定义文案</p>
+        </section>
+
+        <section class="stack output-stack">
+          <div class="section-title">输出配置</div>
+          <button type="button" class="settings-row" id="resetButton">
+            <span>重新开始当前会话</span>
+            <span aria-hidden="true">↻</span>
+          </button>
+          <div class="output-card">
+            <p id="outputSummary">未选择目录时，录音会保存在浏览器内存中。</p>
+            <code>audio/</code>
+            <code>train.jsonl</code>
+            <code>metadata.csv</code>
+          </div>
+        </section>
+      </aside>
+
+      <main class="recording-stage" aria-label="录音工作区">
+        <div class="prompt-area">
+          <div class="prompt-meta" id="promptMeta">
+            <span class="prompt-progress-label" id="progressText">第 1/20 条</span>
+            <div class="prompt-progress-track" aria-hidden="true">
+              <div class="prompt-progress-fill" id="promptProgressFill"></div>
+            </div>
+            <span class="prompt-next" id="nextPromptText">下一条预览</span>
+          </div>
+          <p class="prompt-text" id="promptText">正在载入文案</p>
+        </div>
+
+        <div class="recorder-surface">
+          <div class="status-strip" id="statusStrip">
+            <span class="status-dot status-dot--ready" id="statusDot"></span>
+            <span id="statusText">准备就绪，按 空格 开始</span>
+          </div>
+
+          <div class="vocal-aura" id="vocalAura">
+            <span class="aura-ring aura-ring--one"></span>
+            <span class="aura-ring aura-ring--two"></span>
+            <span class="aura-ring aura-ring--three"></span>
+            <button type="button" class="record-orb" id="recordButton" aria-label="开始录制">
+              <span class="record-led" id="recordLed" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="timer" id="timer">00:00</div>
+          <canvas id="waveform" width="640" height="120" aria-label="实时波形"></canvas>
+          <audio id="playback" controls preload="metadata"></audio>
+        </div>
+
+        <div class="control-row" aria-hidden="true">
+          <button type="button" id="undoButton" hidden></button>
+          <button type="button" id="saveButton" hidden disabled></button>
+          <button type="button" id="shuffleButton" hidden></button>
+        </div>
+      </main>
+
+      <aside class="side-panel task-panel" aria-label="文案预览列表">
+        <div class="list-header">
+          <div>
+            <h2>任务列表</h2>
+            <p id="listSummary">随机抽取 20 条</p>
+          </div>
+          <div class="list-actions">
+            <button type="button" class="icon-button" id="shuffleButtonMirror" title="重新洗牌">↻</button>
+            <button type="button" class="icon-button" id="taskPanelClose" aria-label="收起任务列表">×</button>
+          </div>
+        </div>
+        <ol class="task-list" id="taskList"></ol>
+        <div class="progress-card">
+          <div class="progress-card__row">
+            <span>当前进度</span>
+            <strong id="completionBadge">0/20</strong>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-card__row progress-card__row--muted">
+            <span id="durationText">本次已保存 0.00 秒</span>
+            <span class="quality-badge">优</span>
+          </div>
+        </div>
+      </aside>
+
+      <footer class="status-footer">
+        <div class="footer-group">
+          <span class="system-dot"></span>
+          <strong>系统状态: 正常</strong>
+          <div class="sample-rate-control" id="sampleRateOptions" aria-label="输出采样率">
+            <span>采样率</span>
+            <button type="button" class="sample-rate-button is-active" data-sample-rate="16000">16k</button>
+            <button type="button" class="sample-rate-button" data-sample-rate="24000">24k</button>
+            <button type="button" class="sample-rate-button" data-sample-rate="48000">48k</button>
+          </div>
+          <div class="device-control" id="deviceControl">
+            <span>设备</span>
+            <button
+              type="button"
+              class="audio-input-trigger"
+              id="audioInputButton"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="选择录音输入设备"
+            >
+              <span id="audioInputLabel">默认麦克风</span>
+              <span class="audio-input-caret" aria-hidden="true"></span>
+            </button>
+            <div class="audio-device-menu" id="audioDeviceMenu" role="listbox" aria-label="录音输入设备" hidden></div>
+            <button type="button" class="refresh-device-button" id="refreshDevicesButton" aria-label="刷新麦克风设备">
+              ↻
+            </button>
+          </div>
+        </div>
+        <div class="footer-group footer-group--right">
+          <span class="shortcut-hints">Space 开始或暂停 · Enter 下一条 · Ctrl+Z 撤回</span>
+          <span>VoxCPM2 dataset studio</span>
+        </div>
+      </footer>
+    </div>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

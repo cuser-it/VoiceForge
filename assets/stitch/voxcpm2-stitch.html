@@ -1,0 +1,548 @@
+<!DOCTYPE html><html class="light" lang="zh-CN" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>VoxCPM2 | 录音训练数据生成工作台</title>
+<!-- Google Fonts: Hanken Grotesk -->
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-fixed": "#e2e2e2",
+                    "tertiary-container": "#1b1b1b",
+                    "on-tertiary-container": "#848484",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-high": "#e6e8f1",
+                    "on-secondary-container": "#fefcff",
+                    "on-tertiary-fixed-variant": "#474747",
+                    "surface-dim": "#d8dae3",
+                    "surface-bright": "#f9f9ff",
+                    "surface-tint": "#5e5e5e",
+                    "inverse-primary": "#c6c6c6",
+                    "on-surface": "#181c22",
+                    "secondary": "#0050d7",
+                    "canvas-white": "#FFFFFF",
+                    "surface-variant": "#e0e2eb",
+                    "secondary-fixed-dim": "#b4c5ff",
+                    "background": "#f9f9ff",
+                    "on-surface-variant": "#4c4546",
+                    "surface-container": "#ecedf7",
+                    "inverse-surface": "#2d3037",
+                    "on-error-container": "#93000a",
+                    "secondary-container": "#346bf1",
+                    "tertiary-fixed": "#e2e2e2",
+                    "primary-container": "#1b1b1b",
+                    "on-secondary-fixed": "#00174b",
+                    "outline-variant": "#cfc4c5",
+                    "anti-blue": "#346BF1",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-container": "#848484",
+                    "surface-container-low": "#f1f3fd",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#eef0fa",
+                    "on-tertiary-fixed": "#1b1b1b",
+                    "anti-red": "#FF4641",
+                    "surface": "#f9f9ff",
+                    "tertiary-fixed-dim": "#c6c6c6",
+                    "on-primary-fixed-variant": "#474747",
+                    "on-secondary": "#ffffff",
+                    "anti-green": "#34A853",
+                    "error-container": "#ffdad6",
+                    "outline": "#7e7576",
+                    "error": "#ba1a1a",
+                    "on-secondary-fixed-variant": "#003da9",
+                    "surface-container-highest": "#e0e2eb",
+                    "tertiary": "#000000",
+                    "secondary-fixed": "#dbe1ff",
+                    "primary-fixed-dim": "#c6c6c6",
+                    "on-background": "#181c22",
+                    "primary": "#000000",
+                    "anti-yellow": "#FBBC04",
+                    "on-primary-fixed": "#1b1b1b",
+                    "on-primary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "margin-mobile": "24px",
+                    "margin-desktop": "80px",
+                    "unit": "8px",
+                    "gutter": "32px"
+            },
+            "fontFamily": {
+                    "display-lg-mobile": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "label-sm": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "label-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "display-lg-mobile": ["48px", {"lineHeight": "52px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["72px", {"lineHeight": "80px", "letterSpacing": "-0.04em", "fontWeight": "800"}],
+                    "headline-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #FFFFFF;
+            overflow-x: hidden;
+            font-family: 'Hanken Grotesk', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .vocal-aura {
+            width: 320px;
+            height: 320px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .aura-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            animation: pulsate 3s ease-in-out infinite;
+        }
+
+        @keyframes pulsate {
+            0%, 100% { transform: scale(1); opacity: 0.1; }
+            50% { transform: scale(1.1); opacity: 0.3; }
+        }
+
+        .waveform-bar {
+            width: 3px;
+            background: #000;
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        #shader-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- Shader Background (Interactive Particle System) -->
+
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop py-4 bg-canvas-white/80 backdrop-blur-xl border-b border-black/5">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-xl" data-icon="graphic_eq">graphic_eq</span>
+</div>
+<span class="font-headline-md text-[24px] font-extrabold text-primary tracking-tight">VoxCPM2</span>
+</div>
+<div class="hidden lg:flex gap-1 p-1 bg-surface-container rounded-full">
+<button class="px-4 py-1.5 rounded-full text-label-sm font-bold bg-white shadow-sm text-primary">20 条</button>
+<button class="px-4 py-1.5 rounded-full text-label-sm text-on-surface-variant hover:bg-white/50">30 条</button>
+<button class="px-4 py-1.5 rounded-full text-label-sm text-on-surface-variant hover:bg-white/50">50 条</button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-full border border-black/5">
+<span class="material-symbols-outlined text-[20px]" data-icon="folder_open">folder_open</span>
+<span class="text-label-sm font-medium">/output/session_01</span>
+</div>
+<button class="px-6 py-2 rounded-full bg-primary text-on-primary font-label-lg hover:opacity-90 transition-all shadow-lg shadow-black/10">导出 ZIP</button>
+</div>
+</nav>
+<!-- Left Sidebar: Source Management -->
+<aside class="fixed left-6 top-24 bottom-24 w-72 glass-panel rounded-lg shadow-sm flex flex-col p-6 space-y-6 z-40 overflow-hidden">
+<div>
+<h2 class="font-headline-md text-[18px] text-primary flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="auto_stories">auto_stories</span>
+                文案管理
+            </h2>
+<p class="font-body-md text-label-sm text-on-surface-variant mt-1">管理语料来源</p>
+</div>
+<div class="space-y-4">
+<div class="p-4 rounded-xl bg-surface-container-low border border-primary/10">
+<label class="flex items-center gap-3 cursor-pointer">
+<input checked="" class="text-primary focus:ring-primary" name="source" type="radio">
+<span class="font-label-lg text-primary">内置 300 条标准语料</span>
+</label>
+</div>
+<div class="p-4 rounded-xl border border-dashed border-outline-variant hover:bg-surface-container-low transition-colors cursor-pointer text-center group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="upload_file">upload_file</span>
+<p class="text-label-sm text-on-surface-variant mt-1">上传 .txt / .csv 文件</p>
+</div>
+</div>
+<div class="mt-auto space-y-3">
+<h3 class="text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">输出配置</h3>
+<button class="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-container-low transition-all border border-transparent hover:border-black/5">
+<span class="text-label-sm">本地输出目录</span>
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+</button>
+<div class="p-3 bg-primary-container/5 rounded-lg border border-primary/5">
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+                    包含内容：<br>
+                    • <span class="font-mono">audio/</span> (*.wav)<br>
+                    • <span class="font-mono">train.jsonl</span> (训练对)<br>
+                    • <span class="font-mono">metadata.csv</span> (元数据)
+                </p>
+</div>
+</div>
+</aside>
+<!-- Right Sidebar: Task List -->
+<aside class="fixed right-6 top-24 bottom-24 w-72 glass-panel rounded-lg shadow-sm flex flex-col p-0 z-40 overflow-hidden">
+<div class="p-6 border-b border-black/5 flex items-center justify-between">
+<div>
+<h2 class="font-headline-md text-[18px] text-primary">任务列表</h2>
+<p class="text-label-sm text-on-surface-variant">Session #402</p>
+</div>
+<button class="p-2 rounded-full hover:bg-surface-container-low transition-colors group" title="重新洗牌">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:rotate-180 transition-transform duration-500" data-icon="shuffle">shuffle</span>
+</button>
+</div>
+<div class="flex-grow overflow-y-auto px-2 py-4 space-y-1">
+<div class="flex items-center gap-3 p-3 rounded-lg bg-anti-green/10 text-anti-green">
+<span class="material-symbols-outlined text-[20px]" data-icon="check_circle">check_circle</span>
+<span class="font-label-lg truncate">今天天气真不错...</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg bg-primary text-on-primary shadow-lg shadow-black/10">
+<span class="material-symbols-outlined text-[20px]" data-icon="play_circle">play_circle</span>
+<span class="font-label-lg truncate">大漠孤烟直，长河落日圆。</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low cursor-pointer">
+<div class="w-5 h-5 rounded-full border border-outline flex items-center justify-center text-[10px]">3</div>
+<span class="font-label-lg truncate">人工智能正在改变世界。</span>
+</div>
+<div class="flex items-center gap-3 p-3 opacity-40">
+<div class="w-5 h-5 rounded-full border border-outline"></div>
+<div class="h-4 w-32 bg-surface-variant rounded"></div>
+</div>
+<div class="flex items-center gap-3 p-3 opacity-20">
+<div class="w-5 h-5 rounded-full border border-outline"></div>
+<div class="h-4 w-24 bg-surface-variant rounded"></div>
+</div>
+</div>
+<div class="p-6 bg-surface-container-low border-t border-black/5 space-y-4">
+<div class="flex justify-between text-label-sm">
+<span class="text-on-surface-variant">当前进度</span>
+<span class="font-bold">2 / 20</span>
+</div>
+<div class="w-full bg-white h-2 rounded-full overflow-hidden shadow-inner border border-black/5">
+<div class="bg-primary w-[10%] h-full transition-all duration-500"></div>
+</div>
+<div class="flex justify-between items-end">
+<div class="text-[11px] text-on-surface-variant">
+                    已保存: <span class="text-primary font-bold">01:42</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[11px] text-on-surface-variant">质量评分:</span>
+<span class="px-2 py-0.5 bg-anti-green text-white rounded text-[10px] font-bold">优</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Recording Canvas -->
+<main class="relative z-10 min-h-screen flex flex-col items-center justify-center px-margin-desktop text-center max-w-[calc(100vw-600px)] mx-auto">
+<!-- Script Text -->
+<div class="mb-16">
+<div class="mb-4 flex items-center justify-center gap-4">
+<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant text-[12px] font-bold rounded uppercase tracking-widest">当前语料</span>
+<span class="h-px w-12 bg-outline-variant"></span>
+<span class="text-[12px] text-on-surface-variant">ID: CORP_ZH_042</span>
+</div>
+<h1 class="font-headline-lg text-[48px] md:text-[64px] text-primary leading-tight font-extrabold tracking-tight px-12" id="script-text">
+                "大漠孤烟直，长河落日圆。"
+            </h1>
+</div>
+<!-- Recording Visualization -->
+<div class="flex flex-col items-center gap-2 mb-12">
+
+<div class="text-[20px] font-mono font-bold text-primary hidden" id="timer">00:00.0</div>
+</div>
+<!-- Action Controls -->
+<div class="flex flex-wrap justify-center gap-4">
+<button class="group px-8 py-4 rounded-full border border-outline-variant font-label-lg text-on-surface-variant flex items-center gap-2 hover:bg-white hover:border-primary transition-all">
+<span class="material-symbols-outlined text-[20px] group-active:-rotate-45 transition-transform" data-icon="undo">undo</span>
+                撤销 (Ctrl+Z)
+            </button>
+<button class="px-10 py-4 rounded-full bg-primary text-on-primary font-label-lg flex items-center gap-3 shadow-xl hover:translate-y-[-2px] active:translate-y-[1px] transition-all" id="next-btn">
+<span class="">保存并下一步</span>
+<span class="font-label-sm opacity-60 font-medium px-2 py-0.5 rounded bg-white/20">Enter</span>
+<span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<button class="px-8 py-4 rounded-full border border-outline-variant font-label-lg text-on-surface-variant flex items-center gap-3 hover:bg-white transition-all">
+<span class="material-symbols-outlined text-[20px]" data-icon="pause_circle">pause_circle</span>
+<span class="">暂停</span>
+<span class="font-label-sm opacity-40 border border-current px-1.5 rounded">Space</span>
+</button>
+</div>
+</main>
+<!-- Footer Stats -->
+<footer class="fixed bottom-0 w-full z-40 bg-canvas-white/80 backdrop-blur-xl border-t border-black/5 h-16 flex items-center px-margin-desktop">
+<div class="flex-grow flex items-center gap-12">
+<div class="flex items-center gap-3">
+<div class="w-2.5 h-2.5 rounded-full bg-anti-green"></div>
+<span class="text-label-sm font-bold text-on-surface">系统状态: 正常</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-label-sm text-on-surface-variant">采样率: 48kHz</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-label-sm text-on-surface-variant">设备: Default Microphone (High Definition Audio)</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<a class="text-label-sm text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[16px]" data-icon="keyboard">keyboard</span>快捷键说明</a>
+<a class="text-label-sm text-on-surface-variant hover:text-primary transition-colors" href="#">文档中心</a>
+<span class="w-px h-4 bg-outline-variant"></span>
+<span class="text-[11px] font-mono text-on-surface-variant">VoxCPM2 v2.4.0-stable</span>
+</div>
+</footer>
+<!-- Interactive Particle Background Script -->
+<script>
+        (function() {
+            const canvas = document.getElementById('shader-canvas');
+            const gl = canvas.getContext('webgl');
+            if (!gl) return;
+
+            let mouseX = 0, mouseY = 0;
+            let scrollY = 0;
+
+            function syncSize() {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                canvas.width = w * window.devicePixelRatio;
+                canvas.height = h * window.devicePixelRatio;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+            window.addEventListener('resize', syncSize);
+            syncSize();
+
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
+            window.addEventListener('scroll', () => {
+                scrollY = window.scrollY;
+            });
+
+            const vs = `
+                attribute vec2 a_position;
+                varying vec2 v_uv;
+                void main() {
+                    v_uv = a_position * 0.5 + 0.5;
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                }
+            `;
+
+            const fs = `
+                precision highp float;
+                varying vec2 v_uv;
+                uniform float u_time;
+                uniform vec2 u_resolution;
+                uniform vec2 u_mouse;
+                uniform float u_scroll;
+
+                float hash(vec2 p) {
+                    p = fract(p * vec2(123.34, 456.21));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+
+                void main() {
+                    vec2 uv = v_uv;
+                    vec2 res = u_resolution.xy;
+                    vec2 p = (gl_FragCoord.xy - 0.5 * res) / min(res.x, res.y);
+                    vec2 mouse = (u_mouse - 0.5 * res) / min(res.x, res.y);
+                    mouse.y *= -1.0;
+
+                    vec3 color = vec3(1.0);
+                    
+                    // Dot Grid Background inspired by Antigravity
+                    float gridSize = 0.08;
+                    vec2 gridPos = fract(p / gridSize + u_scroll * 0.001) - 0.5;
+                    float wave = sin(p.x * 2.0 + p.y * 2.0 + u_time + u_scroll * 0.01) * 0.2;
+                    float dotDist = length(gridPos + wave);
+                    float dots = smoothstep(0.04, 0.02, dotDist);
+                    color = mix(color, vec3(0.95), dots * 0.3);
+
+                    // Dynamic Multi-colored Particles
+                    vec3 c1 = vec3(0.204, 0.420, 0.945); // Blue
+                    vec3 c2 = vec3(0.984, 0.737, 0.016); // Yellow
+                    vec3 c3 = vec3(1.0, 0.275, 0.255);   // Red
+                    vec3 c4 = vec3(1.0, 0.584, 0.0);     // Orange
+
+                    for(float i = 0.0; i < 40.0; i++) {
+                        float h = hash(vec2(i, 13.0));
+                        float h2 = hash(vec2(i, 42.0));
+                        
+                        // Particle motion influenced by time, scroll, and mouse
+                        float angle = h * 6.283 + u_time * 0.1 * (h - 0.5);
+                        float distBase = fract(h * 15.0 + u_time * 0.02) * 0.8;
+                        vec2 particlePos = vec2(cos(angle), sin(angle)) * distBase;
+                        particlePos.y -= u_scroll * 0.0005 * (h + 0.5);
+
+                        // Mouse influence: subtle attraction/repulsion
+                        float dToMouse = length(particlePos - mouse);
+                        float force = smoothstep(0.4, 0.0, dToMouse);
+                        particlePos += normalize(particlePos - mouse) * force * 0.05;
+
+                        float d = length(p - particlePos);
+                        float size = (0.003 + 0.005 * h2) * (1.0 + force * 2.0);
+                        
+                        vec3 pColor = c1;
+                        if(h > 0.25) pColor = c2;
+                        if(h > 0.5) pColor = c3;
+                        if(h > 0.75) pColor = c4;
+
+                        // Organic blur and glow
+                        float bloom = smoothstep(size * 4.0, size, d);
+                        color = mix(color, pColor, bloom * 0.55);
+                        color = mix(color, pColor, smoothstep(size, size * 0.2, d) * 0.8);
+                    }
+
+                    // Global grain and light vignette
+                    float grain = hash(uv + u_time * 0.01) * 0.02;
+                    color -= grain;
+                    float vignette = 1.0 - length(uv - 0.5) * 0.2;
+                    color *= vignette;
+
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `;
+
+            const createShader = (type, source) => {
+                const s = gl.createShader(type);
+                gl.shaderSource(s, source);
+                gl.compileShader(s);
+                return s;
+            };
+
+            const program = gl.createProgram();
+            gl.attachShader(program, createShader(gl.VERTEX_SHADER, vs));
+            gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, fs));
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            const vertices = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            const pos = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(pos);
+            gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+
+            const uTime = gl.getUniformLocation(program, 'u_time');
+            const uRes = gl.getUniformLocation(program, 'u_resolution');
+            const uMouse = gl.getUniformLocation(program, 'u_mouse');
+            const uScroll = gl.getUniformLocation(program, 'u_scroll');
+
+            function render(t) {
+                gl.uniform1f(uTime, t * 0.001);
+                gl.uniform2f(uRes, canvas.width, canvas.height);
+                gl.uniform2f(uMouse, mouseX * window.devicePixelRatio, (window.innerHeight - mouseY) * window.devicePixelRatio);
+                gl.uniform1f(uScroll, scrollY);
+                
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+        })();
+
+        // UI Logic
+        const recordBtn = document.getElementById('record-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const statusText = document.getElementById('status-text');
+        const timer = document.getElementById('timer');
+        const redDot = document.getElementById('recording-indicator');
+        const waveform = document.getElementById('waveform-container');
+        const aura = document.getElementById('vocal-aura');
+        
+        let isRecording = false;
+        let timerInterval;
+
+        function toggleRecording() {
+            isRecording = !isRecording;
+            if (isRecording) {
+                micIcon.textContent = 'stop';
+                statusText.textContent = '正在录音...';
+                statusText.classList.add('text-anti-red');
+                redDot.classList.remove('opacity-0');
+                redDot.classList.add('animate-pulse');
+                timer.classList.remove('hidden');
+                waveform.classList.remove('opacity-0');
+                aura.classList.add('scale-110');
+                recordBtn.classList.replace('bg-primary', 'bg-anti-red');
+                
+                let start = Date.now();
+                timerInterval = setInterval(() => {
+                    let diff = Date.now() - start;
+                    let ms = Math.floor((diff % 1000) / 100);
+                    let s = Math.floor(diff / 1000) % 60;
+                    let m = Math.floor(diff / 60000);
+                    timer.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms}`;
+                    
+                    document.querySelectorAll('.waveform-bar').forEach(bar => {
+                        bar.style.height = `${Math.random() * 40 + 10}px`;
+                    });
+                }, 100);
+            } else {
+                micIcon.textContent = 'mic';
+                statusText.textContent = '录音结束';
+                statusText.classList.remove('text-anti-red');
+                redDot.classList.add('opacity-0');
+                redDot.classList.remove('animate-pulse');
+                waveform.classList.add('opacity-0');
+                aura.classList.remove('scale-110');
+                recordBtn.classList.replace('bg-anti-red', 'bg-primary');
+                clearInterval(timerInterval);
+            }
+        }
+
+        recordBtn.addEventListener('click', toggleRecording);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                toggleRecording();
+            }
+            if (e.key === 'Enter') {
+                alert('数据已保存，正在加载下一条...');
+            }
+        });
+    </script>
+
+
+</body></html>
