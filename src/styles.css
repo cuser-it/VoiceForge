@@ -41,7 +41,9 @@ body {
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--canvas);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.94), rgba(247, 245, 239, 0.84) 42%, rgba(228, 233, 229, 0.72) 100%),
+    #f7f5ef;
   color: var(--ink);
 }
 
@@ -62,11 +64,13 @@ button:disabled {
 }
 
 #shaderCanvas {
+  display: block;
   position: fixed;
   inset: 0;
   z-index: 0;
   width: 100vw;
   height: 100vh;
+  opacity: 0.92;
   pointer-events: none;
 }
 

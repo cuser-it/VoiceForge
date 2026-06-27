@@ -1154,139 +1154,326 @@ function initShaderBackground() {
   const canvas = els.shaderCanvas;
   if (!canvas) return;
 
-  const gl = canvas.getContext("webgl");
+  const gl = canvas.getContext("webgl2", {
+    alpha: false,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    desynchronized: true,
+    powerPreference: "high-performance",
+  });
   if (!gl) return;
 
-  let mouseX = 0;
-  let mouseY = 0;
-  let scrollY = 0;
+  const REST_SPACING_PX = 25;
+  const BASE_POINT_SIZE = 1.15;
+  const LIFT_POINT_SIZE = 4.6;
+  const MOUSE_FOLLOW_SECONDS = 0.5;
 
-  function syncSize() {
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(window.innerWidth * ratio);
-    canvas.height = Math.floor(window.innerHeight * ratio);
-    gl.viewport(0, 0, canvas.width, canvas.height);
+  const vertexShaderSource = `#version 300 es
+precision highp float;
+
+uniform int uColumns;
+uniform int uRows;
+uniform float uTime;
+uniform float uAspect;
+uniform float uPixelRatio;
+uniform vec2 uCssViewport;
+uniform vec4 uMouse;
+
+out float vLift;
+out float vCompression;
+out float vDotScale;
+out vec3 vColor;
+
+const float CSS_PIXELS_PER_CM = 37.7952755906;
+
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+
+float perlin(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+
+  float a = dot(hash2(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0));
+  float b = dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+  float c = dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+  float d = dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  mat2 rot = mat2(0.78, -0.63, 0.63, 0.78);
+
+  for (int i = 0; i < 4; i++) {
+    value += amplitude * perlin(p);
+    p = rot * p * 2.03 + vec2(10.7, -3.9);
+    amplitude *= 0.5;
   }
 
-  window.addEventListener("resize", syncSize);
-  window.addEventListener("mousemove", (event) => {
-    mouseX = event.clientX;
-    mouseY = event.clientY;
-  });
-  window.addEventListener("scroll", () => {
-    scrollY = window.scrollY;
-  });
-  syncSize();
+  return value;
+}
 
-  const vertexShaderSource = `
-    attribute vec2 a_position;
-    varying vec2 v_uv;
-    void main() {
-      v_uv = a_position * 0.5 + 0.5;
-      gl_Position = vec4(a_position, 0.0, 1.0);
+vec2 curlNoise(vec2 p) {
+  float e = 0.075;
+  float n1 = fbm(p + vec2(0.0, e));
+  float n2 = fbm(p - vec2(0.0, e));
+  float n3 = fbm(p + vec2(e, 0.0));
+  float n4 = fbm(p - vec2(e, 0.0));
+  return vec2(n1 - n2, n4 - n3) / (2.0 * e);
+}
+
+vec2 metricFromClip(vec2 clipPosition) {
+  return vec2(clipPosition.x * uAspect, clipPosition.y);
+}
+
+vec2 clipFromMetric(vec2 metricPosition) {
+  return vec2(metricPosition.x / max(uAspect, 0.0001), metricPosition.y);
+}
+
+float cssDistanceFromMetric(float metricDistance) {
+  return metricDistance * uCssViewport.y * 0.5;
+}
+
+vec2 latticeCoordinate() {
+  int x = gl_VertexID % uColumns;
+  int y = gl_VertexID / uColumns;
+  vec2 uv = vec2(float(x), float(y)) / vec2(float(uColumns - 1), float(uRows - 1));
+  vec2 jitter = hash2(vec2(float(x), float(y))) * 0.20 / vec2(float(uColumns - 1), float(uRows - 1));
+  uv = clamp(uv + jitter, vec2(0.0), vec2(1.0));
+
+  return uv * 2.0 - 1.0;
+}
+
+void main() {
+  vec2 baseClip = latticeCoordinate();
+  vec2 baseMetric = metricFromClip(baseClip);
+  vec2 mouseMetric = metricFromClip(uMouse.xy);
+  vec2 delta = baseMetric - mouseMetric;
+  float distanceToMouse = length(delta);
+  vec2 sourceDirection = distanceToMouse > 0.0001 ? delta / distanceToMouse : vec2(0.0, 1.0);
+  vec2 swirlDirection = vec2(-sourceDirection.y, sourceDirection.x);
+
+  float cssDistance = cssDistanceFromMetric(distanceToMouse);
+  vec2 world = vec2(baseMetric.x * 1.18 + baseMetric.y * 0.24, baseMetric.y * 0.92 - baseMetric.x * 0.31);
+  vec2 stableField = world;
+  float largeEddy = fbm(stableField * 1.28 + vec2(uTime * 0.036, -uTime * 0.026));
+  float detailEddy = fbm(stableField * 2.35 + vec2(-uTime * 0.060, uTime * 0.045));
+  float asymmetry = fbm(vec2(stableField.x * 1.10 - stableField.y * 0.38, stableField.y * 0.78 + stableField.x * 0.24) * 1.72 + vec2(uTime * 0.032, uTime * 0.041));
+  float angle = atan(delta.y, delta.x);
+  float angularBreakup = fbm(vec2(angle * 0.92 + distanceToMouse * 0.22, distanceToMouse * 0.82) + stableField * 0.32 + vec2(uTime * 0.022, -uTime * 0.018));
+  float slowBreath = 0.5 + 0.5 * sin(uTime * 0.34 + largeEddy * 1.8 + asymmetry * 1.35);
+  float secondaryBreath = 0.5 + 0.5 * sin(uTime * 0.22 - detailEddy * 1.35 + angularBreakup * 1.8);
+  float unevenBreath = (slowBreath - 0.5) * (0.10 + abs(asymmetry) * 0.05) + (secondaryBreath - 0.5) * largeEddy * 0.045;
+  float distanceWarp = clamp(1.0 + largeEddy * 0.18 + detailEddy * 0.055 + asymmetry * 0.13 + angularBreakup * 0.14 - unevenBreath * 0.42, 0.66, 1.36);
+  float distortedDistance = cssDistance * distanceWarp;
+  float baseReach = clamp(uCssViewport.x * 0.23, 350.0, 510.0);
+  float waveReach = baseReach * clamp(1.0 + largeEddy * 0.12 + asymmetry * 0.08 + angularBreakup * 0.09 + unevenBreath, 0.80, 1.22);
+  waveReach += detailEddy * 12.0;
+  float waveMask = 1.0 - smoothstep(waveReach * 0.52, waveReach, distortedDistance);
+  float normalizedDistance = clamp(distortedDistance / max(waveReach, 1.0), 0.0, 1.45);
+  float centerField = (1.0 - smoothstep(0.00, 0.24, normalizedDistance)) * waveMask;
+  float bandCenter = clamp(0.36 + slowBreath * 0.18 + asymmetry * 0.045 + angularBreakup * 0.055, 0.30, 0.68);
+  float bandWidth = clamp(0.23 + secondaryBreath * 0.055 + abs(detailEddy) * 0.030, 0.21, 0.34);
+  float activeBand = exp(-pow((normalizedDistance - bandCenter) / bandWidth, 2.0)) * waveMask;
+  activeBand *= smoothstep(0.06, 0.18, normalizedDistance);
+  float outerBandCenter = clamp(0.74 + angularBreakup * 0.045 - asymmetry * 0.025, 0.60, 0.90);
+  float outerPinch = exp(-pow((normalizedDistance - outerBandCenter) / 0.18, 2.0)) * waveMask;
+  float outerRelax = smoothstep(0.82, 1.08, normalizedDistance);
+  float edgeField = outerPinch * (0.70 + secondaryBreath * 0.30);
+  float densityScale = 1.0;
+  float centerCushion = centerField * (0.18 + slowBreath * 0.16) * (0.90 + largeEddy * 0.12);
+  densityScale += centerCushion * 0.45;
+  densityScale += activeBand * (1.42 + slowBreath * 0.44 + largeEddy * 0.14);
+  densityScale -= outerPinch * (0.34 + abs(detailEddy) * 0.12);
+  densityScale = mix(densityScale, 1.0, outerRelax);
+  densityScale = clamp(densityScale, 0.56, 2.36);
+  float shearMagnitude = (activeBand * (0.88 + slowBreath * 0.24) + centerCushion * 0.28 + outerPinch * 0.34) * waveMask;
+  float mound = centerCushion * 0.28;
+  float compressionBand = edgeField * uMouse.w;
+  float surfaceRipple = sin(cssDistance * 0.030 - uTime * 0.24 + largeEddy * 3.0 + angularBreakup * 1.35) * waveMask;
+  float radialPressure = mound * uMouse.w * 0.38;
+  float mediumPressure = (activeBand * 0.76 + outerPinch * 0.24 + centerCushion * 0.18) * uMouse.w;
+
+  float centimeterMetric = (2.0 * CSS_PIXELS_PER_CM) / max(uCssViewport.y, 1.0);
+  float amplitude = centimeterMetric * mix(0.72, 1.02, uMouse.z);
+  vec2 localCurl = curlNoise(stableField * 1.80 + vec2(uTime * 0.032, -uTime * 0.026));
+  vec2 perturbation = swirlDirection * (0.070 + detailEddy * 0.014 - asymmetry * 0.012);
+  perturbation += localCurl * 0.024;
+  perturbation += vec2(asymmetry, largeEddy - detailEddy) * 0.010;
+
+  vec2 shearDirection = normalize(swirlDirection * (0.94 + asymmetry * 0.06) + localCurl * 0.08 + perturbation * 0.07 + vec2(0.0001, -0.0001));
+  vec2 densityShear = shearDirection * amplitude * shearMagnitude * uMouse.w * 0.58;
+  vec2 moundShear = shearDirection * amplitude * radialPressure * 0.10;
+  vec2 compressionShear = shearDirection * amplitude * compressionBand * 0.18;
+  vec2 rippleShear = (perturbation * 0.70 + localCurl * 0.30) * amplitude * mediumPressure * 0.035;
+  vec2 radialResidual = sourceDirection * surfaceRipple * amplitude * mediumPressure * 0.004;
+  vec2 deformation = densityShear + moundShear + compressionShear + rippleShear + radialResidual;
+
+  vec2 flowSample = baseMetric * 0.82 + vec2(uTime * 0.038, -uTime * 0.027);
+  vec2 globalCurl = curlNoise(flowSample) * 0.012;
+  vec2 mouseCurl = localCurl * mediumPressure * centimeterMetric * 0.006;
+  float mouseEnergy = clamp(activeBand * 1.12 + centerCushion * 0.24 + outerPinch * 0.44 + mediumPressure * 0.45 + abs(densityScale - 1.0) * 0.18, 0.0, 1.0);
+  float turbulence = clamp(mouseEnergy * (0.82 + abs(detailEddy) * 0.16), 0.0, 1.0);
+
+  vec2 deformedMetric = baseMetric + globalCurl + deformation + mouseCurl;
+  vec2 deformedClip = clipFromMetric(deformedMetric);
+
+  vLift = turbulence;
+  vCompression = clamp((abs(asymmetry) * 0.48 + abs(detailEddy) * 0.24) * mouseEnergy, 0.0, 1.0);
+  vDotScale = smoothstep(0.08, 0.86, turbulence);
+  vec3 restColor = vec3(0.050, 0.058, 0.055);
+  vec3 liftColor = mix(vec3(0.08, 0.42, 0.90), vec3(0.96, 0.30, 0.20), smoothstep(0.32, 0.92, turbulence + asymmetry * 0.12));
+  vColor = mix(restColor, liftColor, vDotScale);
+
+  gl_Position = vec4(deformedClip, 0.0, 1.0);
+  gl_PointSize = uPixelRatio * mix(${BASE_POINT_SIZE.toFixed(2)}, ${LIFT_POINT_SIZE.toFixed(2)}, vDotScale);
+}`;
+
+  const fragmentShaderSource = `#version 300 es
+precision highp float;
+
+in float vLift;
+in float vCompression;
+in float vDotScale;
+in vec3 vColor;
+
+out vec4 outColor;
+
+void main() {
+  vec2 point = gl_PointCoord * 2.0 - 1.0;
+  float radiusSquared = dot(point, point);
+  float mask = smoothstep(1.0, 0.20, radiusSquared);
+
+  if (mask < 0.01) {
+    discard;
+  }
+
+  float opacity = mix(0.54, 0.96, vDotScale) * mask;
+  vec3 color = mix(vColor, vec3(0.035, 0.042, 0.040), vCompression * 0.16);
+  outColor = vec4(color, opacity);
+}`;
+
+  const program = createWebglProgram(gl, vertexShaderSource, fragmentShaderSource);
+  if (!program) return;
+
+  const uniforms = getUniforms(gl, program, [
+    "uColumns",
+    "uRows",
+    "uTime",
+    "uAspect",
+    "uPixelRatio",
+    "uCssViewport",
+    "uMouse",
+  ]);
+  const vao = gl.createVertexArray();
+
+  let pixelRatio = 1;
+  let aspect = 1;
+  let cssWidth = 1;
+  let cssHeight = 1;
+  let latticeColumns = 1;
+  let latticeRows = 1;
+  let latticePointCount = 1;
+  let lastFrameTime = performance.now();
+  const pointer = { x: 0, y: 0, down: 0, active: 0.78 };
+  const smoothedMouse = { x: 0, y: 0, down: 0, active: 0.78 };
+
+  function resize() {
+    pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    cssWidth = Math.max(1, window.innerWidth);
+    cssHeight = Math.max(1, window.innerHeight);
+    const width = Math.max(1, Math.floor(cssWidth * pixelRatio));
+    const height = Math.max(1, Math.floor(cssHeight * pixelRatio));
+    const columns = Math.max(12, Math.round(cssWidth / REST_SPACING_PX) + 1);
+    const rows = Math.max(12, Math.round(cssHeight / REST_SPACING_PX) + 1);
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
     }
-  `;
 
-  const fragmentShaderSource = `
-    precision highp float;
-    varying vec2 v_uv;
-    uniform float u_time;
-    uniform vec2 u_resolution;
-    uniform vec2 u_mouse;
-    uniform float u_scroll;
+    latticeColumns = columns;
+    latticeRows = rows;
+    latticePointCount = latticeColumns * latticeRows;
+    aspect = width / height;
+  }
 
-    float hash(vec2 p) {
-      p = fract(p * vec2(123.34, 456.21));
-      p += dot(p, p + 45.32);
-      return fract(p.x * p.y);
-    }
+  function updatePointer(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+    const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+    pointer.x = x * 2 - 1;
+    pointer.y = 1 - y * 2;
+    pointer.active = 1;
+  }
 
-    void main() {
-      vec2 res = u_resolution.xy;
-      vec2 p = (gl_FragCoord.xy - 0.5 * res) / min(res.x, res.y);
-      vec2 mouse = (u_mouse - 0.5 * res) / min(res.x, res.y);
-      mouse.y *= -1.0;
+  function updateSmoothedMouse(delta) {
+    const damping = 1 - Math.exp(-delta / MOUSE_FOLLOW_SECONDS);
+    smoothedMouse.x += (pointer.x - smoothedMouse.x) * damping;
+    smoothedMouse.y += (pointer.y - smoothedMouse.y) * damping;
+    smoothedMouse.down += (pointer.down - smoothedMouse.down) * damping;
+    smoothedMouse.active += (pointer.active - smoothedMouse.active) * damping;
+  }
 
-      vec3 color = vec3(1.0);
-      float gridSize = 0.078;
-      vec2 gridPos = fract(p / gridSize + u_scroll * 0.001) - 0.5;
-      float wave = sin(p.x * 2.0 + p.y * 2.0 + u_time + u_scroll * 0.01) * 0.18;
-      float dotDist = length(gridPos + wave);
-      float dots = smoothstep(0.038, 0.018, dotDist);
-      color = mix(color, vec3(0.94), dots * 0.34);
+  function render(now) {
+    const time = now / 1000;
+    const delta = Math.min((now - lastFrameTime) / 1000, 0.05);
+    lastFrameTime = now;
+    updateSmoothedMouse(delta);
 
-      vec3 c1 = vec3(0.204, 0.420, 0.945);
-      vec3 c2 = vec3(0.984, 0.737, 0.016);
-      vec3 c3 = vec3(1.0, 0.275, 0.255);
-      vec3 c4 = vec3(1.0, 0.584, 0.0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.969, 0.961, 0.929, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-      for(float i = 0.0; i < 40.0; i++) {
-        float h = hash(vec2(i, 13.0));
-        float h2 = hash(vec2(i, 42.0));
-        float angle = h * 6.283 + u_time * 0.1 * (h - 0.5);
-        float distBase = fract(h * 15.0 + u_time * 0.02) * 0.82;
-        vec2 particlePos = vec2(cos(angle), sin(angle)) * distBase;
-        particlePos.y -= u_scroll * 0.0005 * (h + 0.5);
+    gl.useProgram(program);
+    gl.uniform1i(uniforms.uColumns, latticeColumns);
+    gl.uniform1i(uniforms.uRows, latticeRows);
+    gl.uniform1f(uniforms.uTime, time);
+    gl.uniform1f(uniforms.uAspect, aspect);
+    gl.uniform1f(uniforms.uPixelRatio, pixelRatio);
+    gl.uniform2f(uniforms.uCssViewport, cssWidth, cssHeight);
+    gl.uniform4f(uniforms.uMouse, smoothedMouse.x, smoothedMouse.y, smoothedMouse.down, smoothedMouse.active);
 
-        float dToMouse = length(particlePos - mouse);
-        float force = smoothstep(0.4, 0.0, dToMouse);
-        particlePos += normalize(particlePos - mouse) * force * 0.05;
-
-        float d = length(p - particlePos);
-        float size = (0.003 + 0.005 * h2) * (1.0 + force * 2.0);
-        vec3 pColor = c1;
-        if(h > 0.25) pColor = c2;
-        if(h > 0.5) pColor = c3;
-        if(h > 0.75) pColor = c4;
-
-        float bloom = smoothstep(size * 4.0, size, d);
-        color = mix(color, pColor, bloom * 0.5);
-        color = mix(color, pColor, smoothstep(size, size * 0.2, d) * 0.72);
-      }
-
-      float grain = hash(v_uv + u_time * 0.01) * 0.018;
-      color -= grain;
-      float vignette = 1.0 - length(v_uv - 0.5) * 0.16;
-      color *= vignette;
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `;
-
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-  if (!vertexShader || !fragmentShader) return;
-
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
-  gl.useProgram(program);
-
-  const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-  const position = gl.getAttribLocation(program, "a_position");
-  gl.enableVertexAttribArray(position);
-  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-  const uTime = gl.getUniformLocation(program, "u_time");
-  const uRes = gl.getUniformLocation(program, "u_resolution");
-  const uMouse = gl.getUniformLocation(program, "u_mouse");
-  const uScroll = gl.getUniformLocation(program, "u_scroll");
-
-  function render(time) {
-    const ratio = window.devicePixelRatio || 1;
-    gl.uniform1f(uTime, time * 0.001);
-    gl.uniform2f(uRes, canvas.width, canvas.height);
-    gl.uniform2f(uMouse, mouseX * ratio, (window.innerHeight - mouseY) * ratio);
-    gl.uniform1f(uScroll, scrollY);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.POINTS, 0, latticePointCount);
+    gl.disable(gl.BLEND);
     requestAnimationFrame(render);
   }
 
+  window.addEventListener("resize", resize, { passive: true });
+  window.addEventListener("pointermove", updatePointer, { passive: true });
+  window.addEventListener("pointerdown", (event) => {
+    pointer.down = 1;
+    updatePointer(event);
+  }, { passive: true });
+  window.addEventListener("pointerup", (event) => {
+    pointer.down = 0;
+    updatePointer(event);
+  }, { passive: true });
+  window.addEventListener("pointercancel", () => {
+    pointer.down = 0;
+  }, { passive: true });
+  window.addEventListener("pointerleave", () => {
+    pointer.down = 0;
+    pointer.active = 0.68;
+  }, { passive: true });
+  window.addEventListener("pointerenter", (event) => {
+    pointer.active = 1;
+    updatePointer(event);
+  }, { passive: true });
+
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.bindVertexArray(vao);
+  resize();
   requestAnimationFrame(render);
 }
 
@@ -1300,6 +1487,34 @@ function createShader(gl, type, source) {
     return null;
   }
   return shader;
+}
+
+function createWebglProgram(gl, vertexShaderSource, fragmentShaderSource) {
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+  if (!vertexShader || !fragmentShader) return null;
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.warn(gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return null;
+  }
+  return program;
+}
+
+function getUniforms(gl, program, names) {
+  return names.reduce((uniforms, name) => {
+    uniforms[name] = gl.getUniformLocation(program, name);
+    return uniforms;
+  }, {});
 }
 
 function updateDirectorySupport() {
